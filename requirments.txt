@@ -1,0 +1,10 @@
+opencv-python
+ultralytics
+numpy
+supervision
+pyttsx3
+insightface
+onnxruntime
+streamlit
+sqlalchemy
+python-dotenv
