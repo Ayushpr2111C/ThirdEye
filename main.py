@@ -35,8 +35,7 @@ def main():
                 recorder.start(frame)
 
             elif event["type"] == "visitor_left":
-
-        recorder.stop()
+                recorder.stop()
                 
         if detected:
             last_motion_time = time.time()
