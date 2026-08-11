@@ -27,6 +27,7 @@ def main():
         persons = []
         persons = person_detector.detect(frame)
         events = visitor_manager.update(persons)
+        recorder.update(frame)
                 
         for event in events:
 
