@@ -39,18 +39,15 @@ def main():
             x1, y1, x2, y2 = person["box"]
 
             person_id = person["id"]
-            confidence = person["confidence"]
 
             visitor = visitor_manager.visitors.get(person_id)
 
-
             if visitor:
-
-                elapsed = time.monotonic() - visitor["first_seen"]
 
                 if visitor["confirmed"]:
                     status = "VISITOR"
                 else:
+                    elapsed = time.monotonic() - visitor["first_seen"]
                     remaining = max(
                         0,
                         visitor_manager.stay_time - elapsed
@@ -58,12 +55,12 @@ def main():
 
                     status = f"{remaining:.1f}s"
 
-                label = f"Person #{person_id} | {status}"
-
             else:
-                label = f"Person #{person_id}"
+                status = "..."
 
-            # Person bounding box
+            label = f"#{person_id} | {status}"
+
+            # Person box
             cv2.rectangle(
                 frame,
                 (x1, y1),
@@ -72,44 +69,18 @@ def main():
                 2
             )
 
-            # Label directly above the person's box
+            # Label
             cv2.putText(
                 frame,
                 label,
-                (x1, max(y1 - 10, 20)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.65,
-                (255, 0, 0),
-                2
-            )
-            # Display confidence above the person
-            cv2.putText(
-                frame,
-                f"{confidence:.2f}",
                 (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
                 (255, 0, 0),
-                2
+                2,
+                cv2.LINE_AA
             )
-            cv2.rectangle(
-                frame,
-                (x1, y1),
-                (x2, y2),
-                (255, 0, 0),
-                2
-            )
-
-            cv2.putText(
-                frame,
-                f"Person #{person_id} | {confidence:.2f}",
-                (x1, y1 - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255, 0, 0),
-                2
-            )
-
+            
         if len(persons):
             status = "Person Detected"
             color = (0, 0, 255)
