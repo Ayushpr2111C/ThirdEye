@@ -15,7 +15,7 @@ class PersonDetector:
             classes=[0],
             conf=0.5,
             imgsz=640,
-            verbose=False
+            verbose=True
         )[0]
 
         detections = sv.Detections.from_ultralytics(results)

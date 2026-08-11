@@ -4,6 +4,7 @@ from app.utils.camera import Camera
 from app.detectors.motion_detector import MotionDetector
 from app.detectors.person_detector import PersonDetector
 from app.tracking.visitor_manager import VisitorManager
+from app.recording.recorder import Recorder
 
 
 def main():
@@ -14,6 +15,9 @@ def main():
     visitor_manager = VisitorManager(
     stay_time=15,
     exit_grace=3)
+    recorder = Recorder(
+    output_dir="data/recordings",
+    fps=20)
 
     while True:
         frame = camera.read_frame()
@@ -23,6 +27,16 @@ def main():
         persons = []
         persons = person_detector.detect(frame)
         events = visitor_manager.update(persons)
+                
+        for event in events:
+
+            if event["type"] == "visitor_confirmed":
+
+                recorder.start(frame)
+
+            elif event["type"] == "visitor_left":
+
+        recorder.stop()
                 
         if detected:
             last_motion_time = time.time()
@@ -98,6 +112,7 @@ def main():
             2,
         )
 
+        recorder.write(frame)
         cv2.imshow("ThirdEye", frame)
 
         key = cv2.waitKey(1)
