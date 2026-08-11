@@ -1,9 +1,9 @@
 import cv2
 import time
-import lzma
 from app.utils.camera import Camera
 from app.detectors.motion_detector import MotionDetector
 from app.detectors.person_detector import PersonDetector
+from app.tracking.visitor_manager import VisitorManager
 
 
 def main():
@@ -11,6 +11,9 @@ def main():
     motion = MotionDetector()
     last_motion_time = 0
     MOTION_TIMEOUT = 15 
+    visitor_manager = VisitorManager(
+    stay_time=15,
+    exit_grace=3)
 
     while True:
         frame = camera.read_frame()
@@ -19,7 +22,8 @@ def main():
 
         persons = []
         persons = person_detector.detect(frame)
-        
+        events = visitor_manager.update(persons)
+                
         if detected:
             last_motion_time = time.time()
 
@@ -34,6 +38,60 @@ def main():
 
             x1, y1, x2, y2 = person["box"]
 
+            person_id = person["id"]
+            confidence = person["confidence"]
+
+            visitor = visitor_manager.visitors.get(person_id)
+
+
+            if visitor:
+
+                elapsed = time.monotonic() - visitor["first_seen"]
+
+                if visitor["confirmed"]:
+                    status = "VISITOR"
+                else:
+                    remaining = max(
+                        0,
+                        visitor_manager.stay_time - elapsed
+                    )
+
+                    status = f"{remaining:.1f}s"
+
+                label = f"Person #{person_id} | {status}"
+
+            else:
+                label = f"Person #{person_id}"
+
+            # Person bounding box
+            cv2.rectangle(
+                frame,
+                (x1, y1),
+                (x2, y2),
+                (255, 0, 0),
+                2
+            )
+
+            # Label directly above the person's box
+            cv2.putText(
+                frame,
+                label,
+                (x1, max(y1 - 10, 20)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (255, 0, 0),
+                2
+            )
+            # Display confidence above the person
+            cv2.putText(
+                frame,
+                f"{confidence:.2f}",
+                (x1, y1 - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (255, 0, 0),
+                2
+            )
             cv2.rectangle(
                 frame,
                 (x1, y1),
@@ -44,7 +102,7 @@ def main():
 
             cv2.putText(
                 frame,
-                f"Person {person['confidence']:.2f}",
+                f"Person #{person_id} | {confidence:.2f}",
                 (x1, y1 - 10),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,

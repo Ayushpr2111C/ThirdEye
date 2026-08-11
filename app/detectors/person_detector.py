@@ -1,31 +1,47 @@
 from ultralytics import YOLO
+import supervision as sv
 
 
 class PersonDetector:
     def __init__(self):
         self.model = YOLO("yolo11n.pt")
+        self.tracker = sv.ByteTrack()
 
     def detect(self, frame):
-        results = self.model(frame, verbose=False)
+        results = self.model.predict(
+            frame,
+            classes=[0],
+            conf=0.5,
+            verbose=False
+        )[0]
+
+        detections = sv.Detections.from_ultralytics(results)
+
+        detections = self.tracker.update_with_detections(detections)
 
         persons = []
 
-        for result in results:
-            for box in result.boxes:
+        for i in range(len(detections)):
+            if detections.class_id[i] != 0:
+                continue
 
-                cls = int(box.cls[0])
+            tracker_id = detections.tracker_id[i]
 
-                # COCO class 0 = person
-                if cls != 0:
-                    continue
+            # ByteTrack can occasionally return None
+            if tracker_id is None:
+                continue
 
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+            x1, y1, x2, y2 = map(
+                int,
+                detections.xyxy[i]
+            )
 
-                confidence = float(box.conf[0])
+            confidence = float(detections.confidence[i])
 
-                persons.append({
-                    "box": (x1, y1, x2, y2),
-                    "confidence": confidence
-                })
+            persons.append({
+                "id": int(tracker_id),
+                "box": (x1, y1, x2, y2),
+                "confidence": confidence
+            })
 
         return persons
