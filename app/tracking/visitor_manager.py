@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 
 
 class VisitorManager:
@@ -12,54 +13,55 @@ class VisitorManager:
     def update(self, detected_persons):
 
         now = time.monotonic()
-
         events = []
         current_ids = set()
 
-        # Process currently detected people
         for person in detected_persons:
 
             person_id = person["id"]
             current_ids.add(person_id)
 
-            # New tracked person
+            # New person
             if person_id not in self.visitors:
 
                 self.visitors[person_id] = {
                     "first_seen": now,
+                    "first_seen_time": datetime.now().isoformat(
+                        timespec="seconds"
+                    ),
                     "last_seen": now,
                     "confirmed": False
                 }
 
             visitor = self.visitors[person_id]
 
-            # Person is visible right now
             visitor["last_seen"] = now
 
-            # Calculate how long this person has been visible
             elapsed = now - visitor["first_seen"]
 
-            # Confirm after 15 seconds
-            if not visitor["confirmed"] and elapsed >= self.stay_time:
+            # Person has stayed for 15 seconds
+            if (
+                not visitor["confirmed"]
+                and elapsed >= self.stay_time
+            ):
 
                 visitor["confirmed"] = True
 
                 events.append({
                     "type": "visitor_confirmed",
-                    "person_id": person_id
+                    "person_id": person_id,
+                    "first_seen_time": visitor["first_seen_time"]
                 })
 
-        # Handle people temporarily disappearing
+        # Check people who disappeared
         for person_id in list(self.visitors.keys()):
+
+            visitor = self.visitors[person_id]
 
             if person_id not in current_ids:
 
-                visitor = self.visitors[person_id]
-
                 missing_time = now - visitor["last_seen"]
 
-                # Don't immediately delete the person.
-                # ByteTrack can temporarily lose a detection.
                 if missing_time >= self.exit_grace:
 
                     events.append({

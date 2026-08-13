@@ -1,52 +1,157 @@
 import cv2
 import time
+from datetime import datetime
+
 from app.utils.camera import Camera
-from app.detectors.motion_detector import MotionDetector
 from app.detectors.person_detector import PersonDetector
 from app.tracking.visitor_manager import VisitorManager
 from app.recording.recorder import Recorder
+from app.database.database import Database
 
 
 def main():
+
+    # -----------------------------
+    # INITIALIZE SYSTEM
+    # -----------------------------
+
     camera = Camera()
-    motion = MotionDetector()
-    last_motion_time = 0
-    MOTION_TIMEOUT = 15 
+
+    detector = PersonDetector()
+
     visitor_manager = VisitorManager(
-    stay_time=15,
-    exit_grace=3)
+        stay_time=15,
+        exit_grace=3
+    )
+
     recorder = Recorder(
-    output_dir="data/recordings",
-    fps=20)
+        output_dir="data/recordings",
+        fps=20,
+        buffer_seconds=15
+    )
+
+    database = Database()
+
+    # Currently active database events
+    active_events = {}
+
+    print("================================")
+    print("       SENTINEL AI STARTED")
+    print("================================")
 
     while True:
-        frame = camera.read_frame()
-        detected, _ = motion.detect(frame)
-        person_detector = PersonDetector()
 
-        persons = []
-        persons = person_detector.detect(frame)
+        # -----------------------------
+        # CAMERA
+        # -----------------------------
+
+        ret, frame = camera.read()
+
+        if not ret:
+            print("Camera frame failed.")
+            break
+
+        # -----------------------------
+        # YOLO + BYTETRACK
+        # -----------------------------
+
+        persons = detector.detect(frame)
+
+        # -----------------------------
+        # VISITOR MANAGEMENT
+        # -----------------------------
+
         events = visitor_manager.update(persons)
+
+        # -----------------------------
+        # ALWAYS UPDATE RECORDING BUFFER
+        # -----------------------------
+
         recorder.update(frame)
-                
+
+        # -----------------------------
+        # HANDLE EVENTS
+        # -----------------------------
+
         for event in events:
 
-            if event["type"] == "visitor_confirmed":
+            event_type = event["type"]
+            person_id = event["person_id"]
 
+            # =============================
+            # VISITOR CONFIRMED
+            # =============================
+
+            if event_type == "visitor_confirmed":
+
+                print(
+                    f"[VISITOR] Person #{person_id} "
+                    f"confirmed."
+                )
+
+                # Create database event
+                event_id = database.create_event(
+                    person_id=person_id,
+                    start_time=event["first_seen_time"],
+                    confirmed_time=datetime.now().isoformat(
+                        timespec="seconds"
+                    )
+                )
+
+                active_events[person_id] = {
+                    "event_id": event_id,
+                    "confirmed_time": time.monotonic()
+                }
+
+                # Start permanent recording
                 recorder.start(frame)
 
-            elif event["type"] == "visitor_left":
-                recorder.stop()
-                
-        if detected:
-            last_motion_time = time.time()
+            # =============================
+            # VISITOR LEFT
+            # =============================
 
-        if time.time() - last_motion_time < MOTION_TIMEOUT:
-            status = "Motion Detected"
-            color = (0, 0, 255)
-        else:
-            status = "No Motion"
-            color = (0, 255, 0)
+            elif event_type == "visitor_left":
+
+                print(
+                    f"[VISITOR] Person #{person_id} "
+                    f"left."
+                )
+
+                active_event = active_events.pop(
+                    person_id,
+                    None
+                )
+
+                # Stop recording
+                recording_path = recorder.stop()
+
+                if active_event:
+
+                    end_time = datetime.now()
+
+                    duration = (
+                        time.monotonic()
+                        - active_event["confirmed_time"]
+                    )
+
+                    database.finish_event(
+                        event_id=active_event["event_id"],
+                        end_time=end_time.isoformat(
+                            timespec="seconds"
+                        ),
+                        duration=duration,
+                        recording_path=recording_path
+                    )
+
+                    print(
+                        f"[DATABASE] Event "
+                        f"#{active_event['event_id']} "
+                        f"completed."
+                    )
+
+        # -----------------------------
+        # DRAW PERSONS
+        # -----------------------------
 
         for person in persons:
 
@@ -54,14 +159,23 @@ def main():
 
             person_id = person["id"]
 
-            visitor = visitor_manager.visitors.get(person_id)
+            visitor = visitor_manager.visitors.get(
+                person_id
+            )
 
             if visitor:
 
                 if visitor["confirmed"]:
+
                     status = "VISITOR"
+
                 else:
-                    elapsed = time.monotonic() - visitor["first_seen"]
+
+                    elapsed = (
+                        time.monotonic()
+                        - visitor["first_seen"]
+                    )
+
                     remaining = max(
                         0,
                         visitor_manager.stay_time - elapsed
@@ -70,11 +184,12 @@ def main():
                     status = f"{remaining:.1f}s"
 
             else:
+
                 status = "..."
 
             label = f"#{person_id} | {status}"
 
-            # Person box
+            # Bounding box
             cv2.rectangle(
                 frame,
                 (x1, y1),
@@ -83,43 +198,67 @@ def main():
                 2
             )
 
-            # Label
+            # Person label
             cv2.putText(
                 frame,
                 label,
-                (x1, y1 - 10),
+                (x1, max(y1 - 10, 25)),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
                 (255, 0, 0),
                 2,
                 cv2.LINE_AA
             )
-            
-        if len(persons):
-            status = "Person Detected"
-            color = (0, 0, 255)
+
+        # -----------------------------
+        # STATUS
+        # -----------------------------
+
+        if recorder.recording:
+
+            status = "● RECORDING"
+
+        elif persons:
+
+            status = "PERSON DETECTED"
+
         else:
-            status = "No Person"
-            color = (0, 255, 0)
+
+            status = "NO PERSON"
 
         cv2.putText(
             frame,
             status,
-            (20, 40),
+            (20, 35),
             cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            color,
+            0.7,
+            (0, 0, 255) if recorder.recording
+            else (0, 255, 0),
             2,
+            cv2.LINE_AA
         )
 
-        recorder.write(frame)
-        cv2.imshow("ThirdEye", frame)
+        # -----------------------------
+        # DISPLAY
+        # -----------------------------
 
-        key = cv2.waitKey(1)
+        cv2.imshow(
+            "Sentinel AI",
+            frame
+        )
 
-        if key == ord("q"):
+        # Q = Quit
+        if cv2.waitKey(1) & 0xFF == ord("q"):
             break
 
+    # -----------------------------
+    # CLEANUP
+    # -----------------------------
+
+    if recorder.recording:
+        recorder.stop()
+
+    database.close()
     camera.release()
 
 
