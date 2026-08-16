@@ -36,7 +36,7 @@ def main():
     active_events = {}
 
     print("================================")
-    print("       SENTINEL AI STARTED")
+    print("       ThirdEYE AI STARTED")
     print("================================")
 
     while True:
@@ -45,11 +45,7 @@ def main():
         # CAMERA
         # -----------------------------
 
-        ret, frame = camera.read()
-
-        if not ret:
-            print("Camera frame failed.")
-            break
+        frame = camera.read_frame()
 
         # -----------------------------
         # YOLO + BYTETRACK
@@ -84,11 +80,6 @@ def main():
 
             if event_type == "visitor_confirmed":
 
-                print(
-                    f"[VISITOR] Person #{person_id} "
-                    f"confirmed."
-                )
-
                 # Create database event
                 event_id = database.create_event(
                     person_id=person_id,
@@ -111,11 +102,6 @@ def main():
             # =============================
 
             elif event_type == "visitor_left":
-
-                print(
-                    f"[VISITOR] Person #{person_id} "
-                    f"left."
-                )
 
                 active_event = active_events.pop(
                     person_id,
@@ -141,12 +127,6 @@ def main():
                         ),
                         duration=duration,
                         recording_path=recording_path
-                    )
-
-                    print(
-                        f"[DATABASE] Event "
-                        f"#{active_event['event_id']} "
-                        f"completed."
                     )
 
         # -----------------------------
@@ -243,7 +223,7 @@ def main():
         # -----------------------------
 
         cv2.imshow(
-            "Sentinel AI",
+            "ThirdEYE AI",
             frame
         )
 
